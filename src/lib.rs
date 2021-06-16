@@ -21,8 +21,8 @@
 //!
 //! # Basic example
 //! ```
-//! extern crate preferences;
-//! use preferences::{AppInfo, PreferencesMap, Preferences};
+//! extern crate preferences_ron;
+//! use preferences_ron::{AppInfo, PreferencesMap, Preferences};
 //!
 //! const APP_INFO: AppInfo = AppInfo{name: "preferences", author: "Rust language community"};
 //!
@@ -55,8 +55,8 @@
 //! ```
 //! #[macro_use]
 //! extern crate serde_derive;
-//! extern crate preferences;
-//! use preferences::{AppInfo, Preferences};
+//! extern crate preferences_ron;
+//! use preferences_ron::{AppInfo, Preferences};
 //!
 //! const APP_INFO: AppInfo = AppInfo{name: "preferences", author: "Rust language community"};
 //!
@@ -88,8 +88,8 @@
 //! ```
 //! #[macro_use]
 //! extern crate serde_derive;
-//! extern crate preferences;
-//! use preferences::{AppInfo, PreferencesMap, Preferences};
+//! extern crate preferences_ron;
+//! use preferences_ron::{AppInfo, PreferencesMap, Preferences};
 //!
 //! const APP_INFO: AppInfo = AppInfo{name: "preferences", author: "Rust language community"};
 //!
@@ -117,8 +117,8 @@
 //! ```
 //! #[macro_use]
 //! extern crate serde_derive;
-//! extern crate preferences;
-//! use preferences::{AppInfo, Preferences};
+//! extern crate preferences_ron;
+//! use preferences_ron::{AppInfo, Preferences};
 //!
 //! const APP_INFO: AppInfo = AppInfo{name: "preferences", author: "Rust language community"};
 //!
@@ -168,24 +168,24 @@
 #![warn(missing_docs)]
 
 extern crate app_dirs;
+extern crate ron;
 extern crate serde;
-extern crate serde_json;
 
+use app_dirs::{get_app_dir, get_data_root, AppDataType};
 pub use app_dirs::{AppDirsError, AppInfo};
-use app_dirs::{AppDataType, get_data_root, get_app_dir};
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fmt;
-use std::fs::{File, create_dir_all};
+use std::fs::{create_dir_all, File};
 use std::io::{self, ErrorKind, Read, Write};
 use std::path::PathBuf;
 use std::string::FromUtf8Error;
 
 const DATA_TYPE: AppDataType = AppDataType::UserConfig;
-static PREFS_FILE_EXTENSION: &'static str = ".prefs.json";
-static DEFAULT_PREFS_FILENAME: &'static str = "prefs.json";
+static PREFS_FILE_EXTENSION: &str = ".prefs.ron";
+static DEFAULT_PREFS_FILENAME: &str = "prefs.ron";
 
 /// Generic key-value store for user data.
 ///
@@ -205,7 +205,7 @@ pub type PreferencesMap<T = String> = HashMap<String, T>;
 #[derive(Debug)]
 pub enum PreferencesError {
     /// An error occurred during JSON serialization or deserialization.
-    Json(serde_json::Error),
+    Serializer(ron::Error),
     /// An error occurred during preferences file I/O.
     Io(io::Error),
     /// Couldn't figure out where to put or find the serialized data.
@@ -216,7 +216,7 @@ impl fmt::Display for PreferencesError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use PreferencesError::*;
         match *self {
-            Json(ref e) => e.fmt(f),
+            Serializer(ref e) => e.fmt(f),
             Io(ref e) => e.fmt(f),
             Directory(ref e) => e.fmt(f),
         }
@@ -224,27 +224,19 @@ impl fmt::Display for PreferencesError {
 }
 
 impl std::error::Error for PreferencesError {
-    fn description(&self) -> &str {
-        use PreferencesError::*;
-        match *self {
-            Json(ref e) => e.description(),
-            Io(ref e) => e.description(),
-            Directory(ref e) => e.description(),
-        }
-    }
-    fn cause(&self) -> Option<&std::error::Error> {
+    fn cause(&self) -> Option<&dyn std::error::Error> {
         use PreferencesError::*;
         Some(match *self {
-            Json(ref e) => e,
+            Serializer(ref e) => e,
             Io(ref e) => e,
             Directory(ref e) => e,
         })
     }
 }
 
-impl From<serde_json::Error> for PreferencesError {
-    fn from(e: serde_json::Error) -> Self {
-        PreferencesError::Json(e)
+impl From<ron::Error> for PreferencesError {
+    fn from(e: ron::Error) -> Self {
+        PreferencesError::Serializer(e)
     }
 }
 
@@ -280,7 +272,7 @@ impl From<AppDirsError> for PreferencesError {
 /// `const` instance of `AppInfo` that represents your program:
 ///
 /// ```
-/// use preferences::AppInfo;
+/// use preferences_ron::AppInfo;
 /// const APP_INFO: AppInfo = AppInfo{name: "Awesome App", author: "Dedicated Dev"};
 /// ```
 ///
@@ -332,10 +324,12 @@ fn compute_file_path<S: AsRef<str>>(app: &AppInfo, key: S) -> Result<PathBuf, Pr
 }
 
 impl<T> Preferences for T
-    where T: Serialize + DeserializeOwned + Sized
+where
+    T: Serialize + DeserializeOwned + Sized,
 {
     fn save<S>(&self, app: &AppInfo, key: S) -> Result<(), PreferencesError>
-        where S: AsRef<str>
+    where
+        S: AsRef<str>,
     {
         let path = compute_file_path(app, key.as_ref())?;
         path.parent().map(create_dir_all);
@@ -348,10 +342,10 @@ impl<T> Preferences for T
         Self::load_from(&mut file)
     }
     fn save_to<W: Write>(&self, writer: &mut W) -> Result<(), PreferencesError> {
-        serde_json::to_writer(writer, self).map_err(Into::into)
+        ron::ser::to_writer_pretty(writer, self, ron::ser::PrettyConfig::new()).map_err(Into::into)
     }
     fn load_from<R: Read>(reader: &mut R) -> Result<Self, PreferencesError> {
-        serde_json::from_reader(reader).map_err(Into::into)
+        ron::de::from_reader(reader).map_err(Into::into)
     }
 }
 
@@ -371,7 +365,7 @@ mod tests {
         name: "preferences",
         author: "Rust language community",
     };
-    const TEST_PREFIX: &'static str = "tests/module";
+    const TEST_PREFIX: &str = "tests/module";
     fn gen_test_name(name: &str) -> String {
         TEST_PREFIX.to_owned() + "/" + name
     }

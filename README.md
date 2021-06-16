@@ -1,14 +1,18 @@
-# preferences
-_Read and write user-specific application data in Rust_
+# preferences-ron
+Read and write user-specific Rust application data in [RON format](https://github.com/ron-rs/ron).
 
-[![crates.io: preferences](https://img.shields.io/crates/v/preferences.svg?label=crates.io%3A%20preferences)](https://crates.io/crates/preferences)
-[![Linux & OS X build status](https://img.shields.io/travis/AndyBarron/preferences-rs.svg?label=Linux%20%26%20OS%20X%20builds)](https://travis-ci.org/AndyBarron/preferences-rs)
-[![Windows build status](https://img.shields.io/appveyor/ci/AndyBarron/preferences-rs.svg?label=Windows%20builds)](https://ci.appveyor.com/project/AndyBarron/preferences-rs)
+RON stands for `Rusty Object Notation` and looks similar to JSON but
+fully encodes Rust type information.
+
+This crate is a fork of [preferences-rs](https://github.com/AndyBarron/preferences-rs), which uses JSON.  Unfortunately some application data structures cannot be written in JSON.  Particularly
+those that use structs as map keys.  Also that library seems unmaintained since 2017 and does 
+not yet support Serde 1.0+.  Hence this fork.
 
 ## Documentation
-https://docs.rs/preferences
+https://docs.rs/preferences-ron
 
 ## Installation
-Add the following to your `Cargo.toml`:
 
-`preferences = "^1.1.0"`
+```
+$ cargo add preferences-ron
+```
